@@ -1,8 +1,8 @@
-from flask import Flask, Blueprint, render_template, redirect
+from flask import Flask, Blueprint, render_template, redirect, url_for
 import os
 from app.forms import AppointmentForm
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 bp = Blueprint("main", __name__, "/")
@@ -14,9 +14,10 @@ CONNECTION_PARAMETERS = {
     "host": os.environ.get("DB_HOST"),
 }
 
-
-@bp.route("/", methods=['GET', 'POST'])
-def main_page():
+@bp.route("/<int:year>/<int:month>/<int:day>")
+def daily(year,month,day, methods=['GET','POST']):
+    day = datetime(year,month,day)
+    next_day = day+ timedelta(days=1)
     form = AppointmentForm()
     # print(form)
     if form.validate_on_submit():
@@ -31,16 +32,17 @@ def main_page():
             with conn.cursor() as curs:
                 curs.execute(
                     """INSERT INTO appointments (name, start_datetime, end_datetime, description, private)
-                    VALUES 
+                    VALUES
                     (%(name)s, %(start_datetime)s , %(end_datetime)s, %(description)s, %(private)s );""", new_appt)
-
-        return redirect('/')
-
     with psycopg2.connect(**CONNECTION_PARAMETERS) as conn:
         with conn.cursor() as curs:
             curs.execute(
-                "SELECT id, name, start_datetime, end_datetime FROM appointments ORDER BY start_datetime;")
+                "SELECT id, name, start_datetime, end_datetime FROM appointments WHERE start_datetime BETWEEN %(day)s AND %(next_day)s ORDER BY start_datetime;",{'day':day,'next_day':next_day})
             rows = curs.fetchall()
-            # print("*************", rows)
     return render_template('main.html', rows=rows, form=form)
-# (%(new_appt[name])s, %(new_appt.start_date)s %(new_appt.start_time)s, %(new_appt.end_date)s %(new_appt.end_time)s, %(new_appt.description)s, %(new_appt.private)s );""", new_appt)
+
+
+@bp.route("/", methods=['GET', 'POST'])
+def main_page():
+    d = datetime.now()
+    return redirect(url_for(".daily", year=d.year, month=d.month, day=d.day))
